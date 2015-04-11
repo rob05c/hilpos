@@ -9,10 +9,12 @@ CC_FLAGS=-O3 -std=c99 -Wall -Werror -Wfatal-errors
 CC=gcc
 
 all: hilpos
-hilpos: main.o sqlite.o
-	$(LINK_CC) main.o sqlite.o -o hilpos -lm $(LINK_FLAGS)
+hilpos: main.o hilpos.o sqlite.o
+	$(LINK_CC) main.o sqlite.o hilpos.o -o hilpos -lm $(LINK_FLAGS)
 main.o: 
 	$(CC_CPP) $(CPP_FLAGS) -c main.cpp -o main.o
+hilpos.o: 
+	$(CC_CPP) $(CPP_FLAGS) -c hilpos.cpp -o hilpos.o
 sqlite.o: 
 	$(CC) $(CC_FLAGS) -c sqlite3.c -o sqlite.o
 clean:
