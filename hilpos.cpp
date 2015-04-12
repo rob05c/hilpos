@@ -14,34 +14,37 @@
 //#include <chrono>
 #include "sqlite3.h"
 //#include "tbb/tbb.h"
+#include "hilposcuda.hh"
 
 using std::vector;
 using std::string;
 using std::pair;
 
+const double      NORMALIZE_MULTIPLIER = 2000;
+
 /// This should be a lambda, but we're not using C++11 so we can compile with Hydra's old NVCC.
-bool is_outside_bounds(const star& s) {
+static inline bool is_outside_bounds(const star& s) {
    return s.x < -1000.0 || s.x > 1000.0 
      || s.y < -1000.0 || s.y > 1000.0
      || s.z < -1000.0 || s.z > 1000.0;
 }
 
 template<typename StarType>
-StarType denormalize(StarType s) {
+static inline StarType denormalize(StarType s) {
   s.x = s.x * 2000.0 - 1000.0;
   s.y = s.y * 2000.0 - 1000.0;
   s.z = s.z * 2000.0 - 1000.0;
   return s;
 }
 
-double denormalize_distance(const double distance) {
+static inline double denormalize_distance(const double distance) {
   return distance * 2000.0;
 }
 
 /// Removes stars which have coordinates greater than 1000 or less than -1000
 /// and normalizes remaining stars to be between 0 and 1.
 /// \param[in] stars
-vector<star> normalize(vector<star>& stars) {
+static inline vector<star> normalize(vector<star>& stars) {
   stars.erase(std::remove_if(stars.begin(), stars.end(), is_outside_bounds), stars.end());
   for(vector<star>::iterator i = stars.begin(), end = stars.end(); i != end; ++i) {
     star& s = *i;
@@ -52,13 +55,13 @@ vector<star> normalize(vector<star>& stars) {
   return stars;
 }
 
-double get_mid(double min, double max) {
+static inline double get_mid(double min, double max) {
   return min + (max - min) / 2;
 }
 
 /// \param[inout] min
 /// \param[inout] max
-void set_new_dimension(const double val, const double mid, double& min, double& max) {
+static inline void set_new_dimension(const double val, const double mid, double& min, double& max) {
     if(val < mid) {
       max = mid;
     } else {
@@ -69,7 +72,7 @@ void set_new_dimension(const double val, const double mid, double& min, double& 
 /// Returns the hilbert curve position for the given 3D point 
 ///   to the 21st degree (floort(64/3) = 21).
 /// Assumes the space is normalized to 0..1
-uint64_t get_hilbert_position(double x, double y, double z, 
+static inline uint64_t get_hilbert_position(double x, double y, double z, 
                              double xmin, double ymin, double zmin,
                              double xmax, double ymax, double zmax) {
   const int THREE_INTO_SIXTY_FOUR = 21;
@@ -108,24 +111,26 @@ uint64_t get_hilbert_position(double x, double y, double z,
 }
 
 template<typename StarType>
-double distance(const StarType& a, const StarType& b) {
+static inline double distance(const StarType& a, const StarType& b) {
   return hypot(hypot(a.x - b.x, a.y - b.y), a.z - b.z);
 }
 
+/*
 /// \todo fix
 /// \todo make this a stream operator?
-void print_curveposition(const uint64_t pos) {
+static inline void print_curveposition(const uint64_t pos) {
   for(int i = 0, end = sizeof(pos) * CHAR_BIT; i != end; ++i)
     printf("%c", ((pos & (1 << i)) ? '1' : '0'));
 }
+*/
 
-void print_star_header() {
+static inline void print_star_header() {
   printf("%6s, %20s, %20s, %20s, %20s\n", "starid", "x", "y", "z", "distance to previous");
 }
 
 /// \todo make this a stream operator?
 template<typename StarType>
-void print_star(const StarType& s, const double distance) {
+static inline void print_star(const StarType& s, const double distance) {
   printf("%6d, %20.15f, %20.15f, %20.15f, %20.15f\n", s.id, s.x, s.y, s.z, distance);
 //  cout << std::fixed << std::setprecision(15) << "{" << s.id << "," << s.x << "," << s.y << "," << s.z << ",";
 //  cout << distance;
@@ -133,7 +138,7 @@ void print_star(const StarType& s, const double distance) {
 //  cout << "}" << endl;
 }
 
-bool star_comparator(const star& a, const star& b) {
+static bool star_comparator(const star& a, const star& b) {
   return a.curve_position < b.curve_position;
 }
 

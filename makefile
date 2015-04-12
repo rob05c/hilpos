@@ -20,6 +20,6 @@ hilpos.o:
 sqlite.o: 
 	$(CC) $(CC_FLAGS) -c sqlite3.c -o sqlite.o
 hilposcuda.o: 
-	$(CUDA_CC) $(CUDA_FLAGS) -c hilpos.cu -o hilposcuda.o
+	$(CUDA_CC) $(CUDA_FLAGS) -c hilposcuda.cu -o hilposcuda.o
 clean:
 	rm -f *o hilpos

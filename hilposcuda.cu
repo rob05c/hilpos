@@ -1,5 +1,5 @@
 #define CUB_STDERR
-#include "hilpos.hh"
+#include "hilposcuda.hh"
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>    
