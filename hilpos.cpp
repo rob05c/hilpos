@@ -1,4 +1,4 @@
-#include "hilpos.h"
+#include "hilpos.hh"
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
