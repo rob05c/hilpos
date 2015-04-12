@@ -17,6 +17,7 @@
 
 using std::vector;
 using std::string;
+using std::pair;
 
 /// This should be a lambda, but we're not using C++11 so we can compile with Hydra's old NVCC.
 bool is_outside_bounds(const star& s) {
@@ -25,11 +26,12 @@ bool is_outside_bounds(const star& s) {
      || s.z < -1000.0 || s.z > 1000.0;
 }
 
-star denormalize(star star) {
-  star.x = star.x * 2000.0 - 1000.0;
-  star.y = star.y * 2000.0 - 1000.0;
-  star.z = star.z * 2000.0 - 1000.0;
-  return star;
+template<typename StarType>
+StarType denormalize(StarType s) {
+  s.x = s.x * 2000.0 - 1000.0;
+  s.y = s.y * 2000.0 - 1000.0;
+  s.z = s.z * 2000.0 - 1000.0;
+  return s;
 }
 
 double denormalize_distance(const double distance) {
@@ -105,9 +107,9 @@ uint64_t get_hilbert_position(double x, double y, double z,
   return code;
 }
 
-double distance(const star& a, const star& b) {
+template<typename StarType>
+double distance(const StarType& a, const StarType& b) {
   return hypot(hypot(a.x - b.x, a.y - b.y), a.z - b.z);
-//  return fabs(a.x - b.x) + fabs(a.y - b.y) + fabs(a.z - b.z);
 }
 
 /// \todo fix
@@ -122,7 +124,8 @@ void print_star_header() {
 }
 
 /// \todo make this a stream operator?
-void print_star(const star& s, const double distance) {
+template<typename StarType>
+void print_star(const StarType& s, const double distance) {
   printf("%6d, %20.15f, %20.15f, %20.15f, %20.15f\n", s.id, s.x, s.y, s.z, distance);
 //  cout << std::fixed << std::setprecision(15) << "{" << s.id << "," << s.x << "," << s.y << "," << s.z << ",";
 //  cout << distance;
@@ -204,11 +207,75 @@ void solve_tsp(const string& path) {
   print_star_header();
 
   if(!stars.empty())
-    print_star(*stars.begin(), 0.0);
+    print_star(denormalize(*stars.begin()), 0.0);
   vector<double> distances;
   for(vector<star>::iterator i = stars.begin() + 1, end = stars.end(); i != end; ++i) {
     distances.push_back(distance(*i, *(i - 1)));
     print_star(denormalize(*i), denormalize_distance(distance(*i, *(i - 1))));
+  }
+
+  const double distance_sum = std::accumulate(distances.begin(), distances.end(), 0.0);
+  printf("path length: %.15f\n", denormalize_distance(distance_sum));
+  const double distance_average = distance_sum / (double)distances.size();
+  printf("average distance: %.15f\n", denormalize_distance(distance_average));
+  
+  printf("random path length: %.15f\n", denormalize_distance(random_distance_sum));
+  printf("random average distance: %.15f\n", denormalize_distance(random_distance_average));
+}
+
+//
+// CUDA
+//
+
+void solve_tsp_cuda(const string& path) {
+  vector<star> starsvec = get_stars(path);
+  printf("num stars: %lu\n", starsvec.size());
+  starsvec = normalize(starsvec);
+  printf("num normalised: %lu\n", starsvec.size());
+
+  std::random_shuffle(starsvec.begin(), starsvec.end()); // randomize stars, in case database was sorted;
+  double random_distance_sum;
+  double random_distance_average;
+  {
+    vector<double> distances;
+    for(vector<star>::iterator i = starsvec.begin() + 1, end = starsvec.end(); i != end; ++i) {
+      distances.push_back(distance(*i, *(i - 1)));
+    }
+    random_distance_sum = std::accumulate(distances.begin(), distances.end(), 0.0);
+    random_distance_average = random_distance_sum / (double)distances.size();
+  }
+
+  size_t len = starsvec.size();
+  cuda_star* stars = new cuda_star[len];
+  {
+    size_t ia = 0;
+    for(vector<star>::iterator i = starsvec.begin(), end = starsvec.end(); i != end; ++i, ++ia) {
+      stars[ia].x = i->x;
+      stars[ia].y = i->y;
+      stars[ia].z = i->z;
+      stars[ia].id = i->id;
+    }
+  }
+
+  const double xmin = 0.0;
+  const double ymin = 0.0;
+  const double zmin = 0.0;
+  const double xmax = 1.0;
+  const double ymax = 1.0;
+  const double zmax = 1.0;
+
+  uint64_t* codes = create_hilbert_codes(stars, len, xmin, ymin, zmin, xmax, ymax, zmax);
+
+  cuda_sort(stars, codes, len);
+
+  print_star_header();
+
+  if(len > 0)
+    print_star(denormalize(stars[0]), 0.0);
+  vector<double> distances;
+  for(size_t i = 1, end = len; i != end; ++i) {
+    distances.push_back(distance(stars[i], stars[i - 1]));
+    print_star(denormalize(stars[i]), denormalize_distance(distance(stars[i], stars[i - 1])));
   }
 
   const double distance_sum = std::accumulate(distances.begin(), distances.end(), 0.0);
