@@ -49,9 +49,23 @@ __global__ void k_create_hilbert_codes(cuda_star* stars, uint64_t* codes, size_t
   const double y = star.y;
   const double z = star.z;
 
+  // rotations for recursive children.
+  const short codeindex_rotations[8][8] = { {0, 7, 6, 1, 2, 5, 4, 3},
+                                            {0, 1, 6, 7, 4, 5, 2, 3},
+                                            {0, 1, 2, 3, 4, 5, 6, 7},
+                                            {6, 1, 2, 5, 4, 3, 0, 7},
+                                            {0, 7, 6, 1, 2, 5, 4, 3},
+                                            {0, 1, 2, 3, 4, 5, 6, 7},
+                                            {4, 5, 2, 3, 0, 1, 6, 7},
+                                            {6, 1, 2, 5, 4, 3, 0, 7},
+  };
+
+  // Used to rotate the recursive curves, so they align to form one long curve.
+  short codeindex[] = {0, 1, 2, 3, 4, 5, 6, 7};
+
   uint64_t code = 0;
   #pragma unroll
-  for(int i = 0, end = 21; i != end; ++i) {
+  for(int i = 0; i != 21; ++i) {
     code = code << 3;
 
     const double xmid = GET_MID(xmin, xmax);
@@ -65,8 +79,10 @@ __global__ void k_create_hilbert_codes(cuda_star* stars, uint64_t* codes, size_t
       || (x <= xmid && y <= ymid && z >= zmid)
       || (x >= xmid && y >= ymid && z >= zmid)
       || (x <= xmid && y >= ymid && z <= zmid);
-    const char bits = (bit0 << 2) | (bit1 << 1) | (bit2 << 0);
+    char bits = (bit0 << 2) | (bit1 << 1) | (bit2 << 0);
+    bits = codeindex[bits]; // rotate
     code = code | bits;
+
 
     xmin = NEW_DIMENSION_MIN(x, xmid, xmin, xmax);
     xmax = NEW_DIMENSION_MAX(x, xmid, xmin, xmax);
@@ -74,6 +90,11 @@ __global__ void k_create_hilbert_codes(cuda_star* stars, uint64_t* codes, size_t
     ymax = NEW_DIMENSION_MAX(y, ymid, ymin, ymax);
     zmin = NEW_DIMENSION_MIN(z, zmid, zmin, zmax);
     zmax = NEW_DIMENSION_MAX(z, zmid, zmin, zmax);
+
+    // set rotation of recursive child
+    #pragma unroll
+    for(int j = 0; j != 8; ++j)
+      codeindex[j] = codeindex_rotations[bits][codeindex[j]];
   }
   codes[i] = code;
 }
